@@ -1,44 +1,35 @@
-name: Build Android APK
+name: Build .NET MAUI App Android
 
 on:
   push:
-    branches:
-      - main
+    branches: [ "main" ]
   pull_request:
-    branches:
-      - main
+    branches: [ "main" ]
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+
+    runs-on: windows-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v2
-
-    - name: Setup .NET SDK
-      uses: actions/setup-dotnet@v3
-      with:
-        dotnet-version: '8.0.x'
-
-    - name: Install Android SDK
+    - uses: actions/checkout@v3
+    - name: Setup Keystore File
       run: |
-        sudo apt-get update
-        sudo apt-get install -y openjdk-11-jdk
-        yes | sdkmanager --licenses
-        sdkmanager "platform-tools" "platforms;android-33" "build-tools;33.0.0" "ndk;21.3.6528147" "cmdline-tools;latest"
-
-    - name: Restore NuGet packages
-      run: dotnet restore
-
-    - name: Build the project
-      run: dotnet build --configuration Release -t:Run -f net8.0-android
-
-    - name: Publish APK
-      run: dotnet publish -f net8.0-android -c Release -o ./output
-
-    - name: Upload APK
-      uses: actions/upload-artifact@v2
+        echo "${{ secrets.KEYSTORE_FILE }}" > myapp.keystore.asc
+        gpg -d --passphrase "${{ secrets.KEYSTORE_PASSWORD_GPG }}" --batch myapp.keystore.asc > myapp.keystore
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v2
       with:
-        name: android-apk
-        path: ./output/**/*.apk
+        dotnet-version: 8.0.x
+    - name: Install .NET MAUI
+      run: dotnet workload install maui
+    - name: Restore dependencies
+      run: dotnet restore
+    - name: Build
+      run: dotnet build CameraWebViewApp/CameraWebViewApp.csproj -c Release -f net6.0-android /p:AndroidSigningKeyStore=myapp.keystore /p:AndroidSigningKeyAlias=ghactionskey /p:AndroidSigningKeyPass="${{ secrets.KEYSTORE_PASSWORD }}" /p:AndroidSigningStorePass="${{ secrets.KEYSTORE_PASSWORD_ALIAS }}" --no-restore
+    - name: Upload a Build Artifact
+      uses: actions/upload-artifact@v3.1.0
+      with:
+        path: |
+          ./**/*.aab
+          ./**/*.apk
